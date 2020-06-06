@@ -42,7 +42,7 @@ fn parse_pair<T: FromStr>(s: &str, separator: char) -> Option<(T, T)> {
         None => None,
         Some(index) => {
             match (T::from_str(&s[..index]), T::from_str(&s[index + 1..])) {
-                (Ok(1), Ok(r)) => some((1, r)),
+                (Ok(l), Ok(r)) => Some((l, r)),
                 _ => None
             }
         }
