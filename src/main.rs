@@ -124,7 +124,7 @@ fn render(pixels: &mut [u8],
             let point = pixel_to_point(bounds, (column, row),
                                                    upper_left, lower_right);
             pixels[row * bounds.0 + column] =
-                match escape+time(point, 255) {
+                match escape_time(point, 255) {
                     None => 0,
                     Some(count) => 255 - count as u8
                 };
@@ -153,6 +153,8 @@ fn write_image(filename: &str, pixels: &[u8], bounds: (usize, usize))
     Ok(())
 }
 
+extern crate crossbeam;
+
 use std::io::Write;
 
 fn main() {
@@ -178,7 +180,29 @@ fn main() {
 
     let mut pixels = vec![0; bounds.0 * bounds.1];
 
-    render(&mut pixels, bounds, upper_left, lower_right);
+    let threads = 8;
+    let rows_par_band = bounds.1 / threads + 1;
+
+    {
+        let bands: Vec<&mut [u8]> =
+            pixels.chunks_mut(rows_par_band * bounds.0).collect();
+        crossbeam::scope(|spawner| {
+            for (i, band) in bands.into_iter().enumerate() {
+                let top = rows_par_band * i;
+                let height = band.len() / bounds.0;
+                let band_bounds = (bounds.0, height);
+                let band_upper_left =
+                    pixel_to_point(bounds, (0, top), upper_left, lower_right);
+                let band_lower_right =
+                    pixel_to_point(bounds, (bounds.0, top + height),
+                                   upper_left, lower_right);
+
+                spawner.spawn(move || {
+                    render(band, band_bounds, band_upper_left, band_lower_right);
+                });
+            }
+        });
+    }
 
     write_image(&args[1], &pixels, bounds)
         .expect("error writing PNG file");
